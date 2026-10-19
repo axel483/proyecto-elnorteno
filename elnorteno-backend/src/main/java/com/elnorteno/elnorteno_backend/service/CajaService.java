@@ -32,19 +32,29 @@ public class CajaService {
         return sesionCajaRepository.findAll();
     }
 
+    /**
+     * Obtiene la sesión de caja activa (si existe)
+     */
+    public SesionCaja obtenerSesionActiva() {
+        // Asumimos que solo hay una caja (id = 1). Si usas varias, deberías obtener la caja por defecto.
+        return sesionCajaRepository.findByCajaIdCajaAndEstado(1, "ABIERTA").orElse(null);
+    }
+
     @Transactional
     public SesionCaja abrirCaja(AperturaCajaDTO dto) {
-        Caja caja = cajaRepository.findById(dto.getIdCaja())
-                .orElseThrow(() -> new RuntimeException("Caja no encontrada"));
+        // Obtener caja por defecto (id=1). Debe existir en la BD.
+        Caja caja = cajaRepository.findById(1)
+                .orElseThrow(() -> new RuntimeException("Caja por defecto no encontrada. Asegúrate de tener una caja con id=1."));
 
-        // Verificar si ya existe una sesión abierta para esta caja
-        sesionCajaRepository.findByCajaIdCajaAndEstado(dto.getIdCaja(), "ABIERTA")
+        // Obtener usuario por defecto (id=1). Debe existir en la BD.
+        Usuario usuario = usuarioRepository.findById(1)
+                .orElseThrow(() -> new RuntimeException("Usuario por defecto no encontrado. Asegúrate de tener un usuario con id=1."));
+
+        // Verificar si ya existe una sesión abierta
+        sesionCajaRepository.findByCajaIdCajaAndEstado(caja.getIdCaja(), "ABIERTA")
                 .ifPresent(s -> {
                     throw new RuntimeException("La caja ya se encuentra ABIERTA");
                 });
-
-        Usuario usuario = usuarioRepository.findById(dto.getIdUsuario())
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         // Actualizar estado de la caja
         caja.setEstado("ABIERTA");

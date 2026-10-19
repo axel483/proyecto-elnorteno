@@ -1,45 +1,89 @@
 package com.elnorteno.elnorteno_backend.service;
 
-import com.elnorteno.elnorteno_backend.dto.ApiResponse;
 import com.elnorteno.elnorteno_backend.entity.Cliente;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Service
+@Slf4j
 public class ConsultaExternaService {
 
+    @Value("${decolecta.api.key}")
+    private String apiKey;
+
+    @Value("${decolecta.api.url}")
+    private String apiUrl;
+
     private final RestTemplate restTemplate = new RestTemplate();
-    private static final String API_KEY = "d2f920e9cda5e3c3c7b0875f00efcf59";
 
+    // Caché en memoria (24 horas)
+    private static class CacheEntry {
+        final Cliente cliente;
+        final LocalDateTime expira;
+        CacheEntry(Cliente cliente, LocalDateTime expira) {
+            this.cliente = cliente;
+            this.expira = expira;
+        }
+    }
+    private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
+    private static final int HORAS_CACHE = 24;
+
+    private Cliente getDeCache(String key) {
+        CacheEntry entry = cache.get(key);
+        if (entry == null) return null;
+        if (LocalDateTime.now().isAfter(entry.expira)) {
+            cache.remove(key);
+            return null;
+        }
+        log.info("📦 Cliente obtenido de caché: {}", key);
+        return entry.cliente;
+    }
+
+    private void guardarEnCache(String key, Cliente cliente) {
+        if (cliente != null) {
+            cache.put(key, new CacheEntry(cliente, LocalDateTime.now().plusHours(HORAS_CACHE)));
+            log.info("💾 Cliente guardado en caché: {}", key);
+        }
+    }
+
+    // ============================================
+    // CONSULTAR DNI
+    // ============================================
     public Cliente consultarDNI(String numero) {
-        String url = "https://peruapi.com/api/dni/" + numero + "?api_token=" + API_KEY;
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-API-KEY", API_KEY);
-        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (numero == null || numero.length() != 8) {
+            log.warn("⚠️ DNI inválido: {}", numero);
+            return null;
+        }
 
-        HttpEntity<String> entity = new HttpEntity<>(headers);
+        // LOGS DE VERIFICACIÓN
+        log.info("🔧 API URL: {}", apiUrl);
+        log.info("🔧 API Key: {}", (apiKey != null && !apiKey.isEmpty()) ? "CARGADA" : "❌ NULL");
+
+        if (apiUrl == null || apiUrl.isEmpty()) {
+            log.error("❌ decolecta.api.url NO se cargó. Revisa application.properties");
+            return null;
+        }
+
+        String cacheKey = "DNI_" + numero;
+        Cliente cacheado = getDeCache(cacheKey);
+        if (cacheado != null) return cacheado;
+
+        String url = apiUrl + "/reniec/dni?numero=" + numero;
+        log.info("📡 Consultando: {}", url);
 
         try {
-            ResponseEntity<ApiResponse> response = restTemplate.exchange(
-                url, HttpMethod.GET, entity, ApiResponse.class);
+            Map<String, Object> data = hacerConsulta(url);
 
-            // === LOGS PARA DEPURACIÓN ===
-            System.out.println("\n========== RESPUESTA DE PERUAPI (DNI) ==========");
-            System.out.println("Status Code: " + response.getStatusCode());
-            System.out.println("Headers: " + response.getHeaders());
-            System.out.println("Body (raw): " + response.getBody());
-            System.out.println("=================================================\n");
-
-            ApiResponse data = response.getBody();
-            if (data == null) {
-                System.out.println("La respuesta está vacía.");
-                return null;
-            }
-
-            // Verificar si al menos tiene nombres
-            if (data.getNombres() == null && data.getApellidoPaterno() == null) {
-                System.out.println("No se encontraron datos de nombre para este DNI.");
+            if (data == null || !data.containsKey("first_name")) {
+                log.warn("❌ DNI {} no encontrado en RENIEC", numero);
                 return null;
             }
 
@@ -47,69 +91,86 @@ public class ConsultaExternaService {
             cliente.setNumeroDocumento(numero);
             cliente.setTipoDocumento("DNI");
 
-            // Construir nombre completo con los campos que vengan
-            String nombres = data.getNombres() != null ? data.getNombres() : "";
-            String apellidoPaterno = data.getApellidoPaterno() != null ? data.getApellidoPaterno() : "";
-            String apellidoMaterno = data.getApellidoMaterno() != null ? data.getApellidoMaterno() : "";
+            String nombres = (String) data.getOrDefault("first_name", "");
+            String apellidoPaterno = (String) data.getOrDefault("first_last_name", "");
+            String apellidoMaterno = (String) data.getOrDefault("second_last_name", "");
+            cliente.setNombreRazonSocial((nombres + " " + apellidoPaterno + " " + apellidoMaterno).trim());
+            cliente.setDireccion((String) data.getOrDefault("address", null));
 
-            String nombreCompleto;
-            if (!apellidoPaterno.isEmpty() || !apellidoMaterno.isEmpty()) {
-                nombreCompleto = (nombres + " " + apellidoPaterno + " " + apellidoMaterno).trim();
-            } else {
-                // Si no hay apellidos separados, usar solo el campo nombres
-                nombreCompleto = nombres;
-            }
-
-            cliente.setNombreRazonSocial(nombreCompleto);
-            cliente.setDireccion(data.getDireccion());
-
-            System.out.println("Cliente mapeado: " + cliente);
+            log.info("✅ DNI {} encontrado: {}", numero, cliente.getNombreRazonSocial());
+            guardarEnCache(cacheKey, cliente);
             return cliente;
 
         } catch (Exception e) {
-            System.err.println("Error al consultar DNI en PeruAPI: " + e.getMessage());
-            e.printStackTrace();
+            log.error("❌ Error al consultar DNI {}: {}", numero, e.getMessage());
             return null;
         }
     }
 
+    // ============================================
+    // CONSULTAR RUC
+    // ============================================
     public Cliente consultarRUC(String numero) {
-        String url = "https://peruapi.com/api/ruc/" + numero + "?api_token=" + API_KEY;
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-API-KEY", API_KEY);
-        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (numero == null || numero.length() != 11) {
+            log.warn("⚠️ RUC inválido: {}", numero);
+            return null;
+        }
 
-        HttpEntity<String> entity = new HttpEntity<>(headers);
+        if (apiUrl == null || apiUrl.isEmpty()) {
+            log.error("❌ decolecta.api.url NO se cargó");
+            return null;
+        }
+
+        String cacheKey = "RUC_" + numero;
+        Cliente cacheado = getDeCache(cacheKey);
+        if (cacheado != null) return cacheado;
+
+        String url = apiUrl + "/sunat/ruc?numero=" + numero;
 
         try {
-            ResponseEntity<ApiResponse> response = restTemplate.exchange(
-                url, HttpMethod.GET, entity, ApiResponse.class);
+            Map<String, Object> data = hacerConsulta(url);
 
-            // === LOGS PARA DEPURACIÓN ===
-            System.out.println("\n========== RESPUESTA DE PERUAPI (RUC) ==========");
-            System.out.println("Status Code: " + response.getStatusCode());
-            System.out.println("Body (raw): " + response.getBody());
-            System.out.println("=================================================\n");
-
-            ApiResponse data = response.getBody();
-            if (data == null || data.getRazonSocial() == null) {
-                System.out.println("No se encontró RUC o razón social.");
+            if (data == null || !data.containsKey("razon_social")) {
+                log.warn("❌ RUC {} no encontrado en SUNAT", numero);
                 return null;
             }
 
             Cliente cliente = new Cliente();
             cliente.setNumeroDocumento(numero);
             cliente.setTipoDocumento("RUC");
-            cliente.setNombreRazonSocial(data.getRazonSocial());
-            cliente.setDireccion(data.getDireccion());
+            cliente.setNombreRazonSocial((String) data.get("razon_social"));
+            cliente.setDireccion((String) data.getOrDefault("direccion", null));
 
-            System.out.println("Cliente mapeado: " + cliente);
+            log.info("✅ RUC {} encontrado: {}", numero, cliente.getNombreRazonSocial());
+            guardarEnCache(cacheKey, cliente);
             return cliente;
 
         } catch (Exception e) {
-            System.err.println("Error al consultar RUC en PeruAPI: " + e.getMessage());
-            e.printStackTrace();
+            log.error("❌ Error al consultar RUC {}: {}", numero, e.getMessage());
             return null;
         }
+    }
+
+    private Map<String, Object> hacerConsulta(String url) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + apiKey);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            return response.getBody();
+        } catch (RestClientException e) {
+            log.error("Error en consulta externa: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    public void limpiarCache() {
+        cache.clear();
+    }
+
+    public int tamanioCache() {
+        return cache.size();
     }
 }

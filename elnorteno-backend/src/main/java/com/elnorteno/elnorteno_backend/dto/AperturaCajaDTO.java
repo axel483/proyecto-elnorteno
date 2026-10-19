@@ -5,7 +5,5 @@ import java.math.BigDecimal;
 
 @Data
 public class AperturaCajaDTO {
-    private Integer idCaja;
-    private Integer idUsuario;
     private BigDecimal montoInicial;
 }

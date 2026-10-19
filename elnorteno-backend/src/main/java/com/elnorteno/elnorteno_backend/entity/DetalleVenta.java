@@ -26,8 +26,15 @@ public class DetalleVenta {
     @JoinColumn(name = "id_presentacion", nullable = false)
     private PresentacionProducto presentacion;
 
+    @ManyToOne
+    @JoinColumn(name = "id_producto", nullable = false)
+    private Producto producto;
+
     @Column(name = "cantidad", nullable = false)
     private Integer cantidad;
+
+    @Column(name = "precio_unitario", nullable = false, precision = 10, scale = 2)
+    private BigDecimal precioUnitario;
 
     @Column(name = "precio_aplicado", nullable = false, precision = 10, scale = 2)
     private BigDecimal precioAplicado;

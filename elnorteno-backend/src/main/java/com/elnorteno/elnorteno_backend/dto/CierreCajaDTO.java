@@ -7,4 +7,5 @@ import java.math.BigDecimal;
 public class CierreCajaDTO {
     private Integer idSesion;
     private BigDecimal montoFinal;
+    private String observaciones;
 }

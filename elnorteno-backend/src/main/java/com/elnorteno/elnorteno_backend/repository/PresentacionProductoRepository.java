@@ -8,6 +8,5 @@ import java.util.List;
 
 @Repository
 public interface PresentacionProductoRepository extends JpaRepository<PresentacionProducto, Integer> {
-    // Método corregido: sigue la convención findBy + propiedad + subpropiedad
     List<PresentacionProducto> findByProductoIdProducto(Integer idProducto);
 }

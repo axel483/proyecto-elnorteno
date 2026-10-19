@@ -30,7 +30,4 @@ public class PresentacionProducto {
 
     @Column(name = "precio_venta", nullable = false, precision = 10, scale = 2)
     private BigDecimal precioVenta;
-
-    @Column(name = "stock_fisico", nullable = false)
-    private Integer stockFisico = 0;
 }

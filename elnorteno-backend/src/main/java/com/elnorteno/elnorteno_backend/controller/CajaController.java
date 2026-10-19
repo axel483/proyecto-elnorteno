@@ -12,14 +12,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/cajas")
+@RequestMapping("/api/caja")
 @CrossOrigin(origins = "*")
 public class CajaController {
 
     @Autowired
     private CajaService cajaService;
 
-    @GetMapping
+    @GetMapping("/cajas")
     public List<Caja> listarCajas() {
         return cajaService.listarTodas();
     }
@@ -27,6 +27,18 @@ public class CajaController {
     @GetMapping("/sesiones")
     public List<SesionCaja> listarSesiones() {
         return cajaService.listarSesiones();
+    }
+
+    // NUEVO ENDPOINT: Obtener estado actual de la caja
+    @GetMapping("/estado")
+    public ResponseEntity<?> obtenerEstadoCaja() {
+        SesionCaja sesion = cajaService.obtenerSesionActiva();
+        if (sesion != null) {
+            return ResponseEntity.ok(sesion);
+        } else {
+            // Retornar null o un objeto vacío para indicar que no hay caja abierta
+            return ResponseEntity.ok(null);
+        }
     }
 
     @PostMapping("/abrir")

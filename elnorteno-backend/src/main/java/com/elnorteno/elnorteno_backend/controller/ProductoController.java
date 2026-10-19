@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/productos")
@@ -18,9 +19,43 @@ public class ProductoController {
     @Autowired
     private ProductoService productoService;
 
+    // 👇 MODIFICADO: Recibe idEmpresa para filtrar
     @GetMapping
-    public List<Producto> listar() {
-        return productoService.listarTodos();
+    public List<ProductoDTO> listar(@RequestParam(required = false) Integer idEmpresa) {
+        List<Producto> productos = productoService.listarTodos();
+        return productos.stream()
+                .filter(Producto::getEstado)
+                // Filtro SaaS: Si el producto tiene empresa, debe coincidir. (Si es null, se muestra por retrocompatibilidad).
+                .filter(p -> idEmpresa == null || p.getIdEmpresa() == null || p.getIdEmpresa().equals(idEmpresa))
+                .map(this::convertirADTO)
+                .collect(Collectors.toList());
+    }
+
+    private ProductoDTO convertirADTO(Producto producto) {
+        ProductoDTO dto = new ProductoDTO();
+        dto.setIdProducto(producto.getIdProducto());
+        dto.setIdCategoria(producto.getCategoria().getIdCategoria());
+        dto.setNombre(producto.getNombre());
+        dto.setDescripcion(producto.getDescripcion());
+        dto.setStockMinimo(producto.getStockMinimo());
+        dto.setStock(producto.getStock());
+
+        if (producto.getPresentaciones() != null && !producto.getPresentaciones().isEmpty()) {
+            dto.setPresentaciones(
+                producto.getPresentaciones().stream()
+                    .map(pres -> {
+                        ProductoDTO.PresentacionDTO presDTO = new ProductoDTO.PresentacionDTO();
+                        presDTO.setIdPresentacion(pres.getIdPresentacion());
+                        presDTO.setNombrePresentacion(pres.getNombrePresentacion());
+                        presDTO.setFactorConversion(pres.getFactorConversion());
+                        presDTO.setPrecioVenta(pres.getPrecioVenta());
+                        return presDTO;
+                    })
+                    .collect(Collectors.toList())
+            );
+        }
+
+        return dto;
     }
 
     @GetMapping("/presentaciones")
@@ -34,11 +69,10 @@ public class ProductoController {
             Producto nuevo = productoService.guardarConPresentacion(dto);
             return ResponseEntity.ok(nuevo);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body("Error al guardar: " + e.getMessage());
         }
     }
 
-    // ✅ ACTUALIZAR producto (con sus presentaciones)
     @PutMapping("/{id}")
     public ResponseEntity<?> actualizar(@PathVariable Integer id, @RequestBody ProductoDTO dto) {
         try {
@@ -49,14 +83,13 @@ public class ProductoController {
         }
     }
 
-    // ✅ ELIMINAR producto
     @DeleteMapping("/{id}")
     public ResponseEntity<?> eliminar(@PathVariable Integer id) {
         try {
             productoService.eliminar(id);
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok("Producto desactivado correctamente");
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error al eliminar: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Error al desactivar: " + e.getMessage());
         }
     }
 }

@@ -23,8 +23,8 @@ export default function Caja() {
   // Cargar estado de la caja desde Spring Boot
   const cargarEstadoCaja = async () => {
     try {
-      const res = await api.get('/caja/estado');
-      setCajaActiva(res.data); // Espera un objeto si hay caja abierta o null si está cerrada
+      const res = await api.get('/caja/estado'); // RUTA CORREGIDA
+      setCajaActiva(res.data); // null si no hay sesión abierta, o el objeto SesionCaja
     } catch (error) {
       console.error("Error al consultar estado de caja:", error);
     } finally {
@@ -45,6 +45,7 @@ export default function Caja() {
     }
 
     try {
+      // ENVIAR SOLO montoInicial (el backend usará caja y usuario por defecto)
       const res = await api.post('/caja/abrir', {
         montoInicial: parseFloat(montoInicial)
       });
@@ -54,7 +55,9 @@ export default function Caja() {
       setTimeout(() => setMensaje(null), 3000);
     } catch (error) {
       console.error("Error al abrir caja:", error);
-      alert("No se pudo abrir la caja. Inténtalo de nuevo.");
+      // Mostrar el mensaje de error del backend si existe
+      const mensajeError = error.response?.data || "No se pudo abrir la caja. Inténtalo de nuevo.";
+      alert(mensajeError);
     }
   };
 
@@ -67,8 +70,9 @@ export default function Caja() {
     }
 
     try {
-      await api.post(`/caja/cerrar/${cajaActiva.idCaja}`, {
-        montoFinalEfectivo: parseFloat(montoFinalEfectivo),
+      await api.post('/caja/cerrar', {
+        idSesion: cajaActiva.idSesion,
+        montoFinal: parseFloat(montoFinalEfectivo),
         observaciones: observaciones
       });
       setCajaActiva(null);
@@ -174,7 +178,7 @@ export default function Caja() {
               </div>
               <div>
                 <p className="text-xs text-slate-500 font-bold uppercase">Ventas Efectivo</p>
-                <p className="text-xl font-black text-slate-900">S/ {Number(cajaActiva.totalEfectivo || 0).toFixed(2)}</p>
+                <p className="text-xl font-black text-slate-900">S/ {Number(cajaActiva.montoEfectivo || 0).toFixed(2)}</p>
               </div>
             </div>
 
@@ -184,7 +188,7 @@ export default function Caja() {
               </div>
               <div>
                 <p className="text-xs text-slate-500 font-bold uppercase">Yape / Plin</p>
-                <p className="text-xl font-black text-slate-900">S/ {Number(cajaActiva.totalDigital || 0).toFixed(2)}</p>
+                <p className="text-xl font-black text-slate-900">S/ {Number(cajaActiva.montoYape || 0).toFixed(2)}</p>
               </div>
             </div>
 
@@ -194,7 +198,7 @@ export default function Caja() {
               </div>
               <div>
                 <p className="text-xs text-slate-500 font-bold uppercase">Tarjetas</p>
-                <p className="text-xl font-black text-slate-900">S/ {Number(cajaActiva.totalTarjeta || 0).toFixed(2)}</p>
+                <p className="text-xl font-black text-slate-900">S/ 0.00</p>
               </div>
             </div>
           </div>

@@ -9,22 +9,31 @@ import {
   X, 
   Phone, 
   Mail, 
-  MapPin, 
-  FileText 
+  MapPin 
 } from 'lucide-react';
-import { getClientes, createCliente, updateCliente, deleteCliente, getProveedores, createProveedor } from '../services/api';
+import { 
+  getClientes, 
+  createCliente, 
+  updateCliente, 
+  deleteCliente, 
+  getProveedores, 
+  createProveedor,
+  updateProveedor,
+  deleteProveedor,
+  buscarRucProveedor,
+  buscarClientePorDocumento
+} from '../services/api';
 
 export default function Clientes() {
-  const [activeTab, setActiveTab] = useState('clientes'); // 'clientes' o 'proveedores'
+  const [activeTab, setActiveTab] = useState('clientes');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [buscandoDoc, setBuscandoDoc] = useState(false);
 
-  // Estado para el Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   
-  // Formulario único reutilizable
   const [formData, setFormData] = useState({
     tipoDocumento: 'DNI',
     documento: '',
@@ -43,33 +52,99 @@ export default function Clientes() {
     try {
       if (activeTab === 'clientes') {
         const data = await getClientes();
-        setItems(data);
+        // Unificar campos de cliente
+        const normalizados = (Array.isArray(data) ? data : []).map(c => ({
+          id: c.idCliente,
+          tipoDocumento: c.tipoDocumento || 'DNI',
+          documento: c.numeroDocumento || '',
+          nombreRazonSocial: c.nombreRazonSocial || '',
+          telefono: c.telefono || '',
+          email: c.correo || '',
+          direccion: c.direccion || ''
+        }));
+        setItems(normalizados);
       } else {
         const data = await getProveedores();
-        setItems(data);
+        // 👇 NORMALIZAR CAMPOS DE PROVEEDOR (ruc → documento, razonSocial → nombreRazonSocial)
+        const normalizados = (Array.isArray(data) ? data : []).map(p => ({
+          id: p.idProveedor,
+          tipoDocumento: 'RUC',
+          documento: p.ruc || '',
+          nombreRazonSocial: p.razonSocial || '',
+          telefono: p.telefono || '',
+          email: p.email || '',
+          direccion: p.direccion || ''
+        }));
+        setItems(normalizados);
       }
     } catch (error) {
       console.error(`Error al cargar ${activeTab}:`, error);
-      // Datos mock de respaldo por si el backend aún no está listo
-      if (activeTab === 'clientes') {
-        setItems([
-          { id: 1, tipoDocumento: 'DNI', documento: '45678912', nombreRazonSocial: 'Juan Pérez Gómez', telefono: '987654321', email: 'juan.perez@gmail.com', direccion: 'Av. El Sol 123' },
-          { id: 2, tipoDocumento: 'RUC', documento: '20123456789', nombreRazonSocial: 'Empresa Inversiones SAC', telefono: '014567890', email: 'contacto@inversiones.com', direccion: 'Calle Real 456' }
-        ]);
-      } else {
-        setItems([
-          { id: 1, tipoDocumento: 'RUC', documento: '20555888991', nombreRazonSocial: 'Distribuidora Abarrotes del Norte E.I.R.L.', telefono: '945123789', email: 'ventas@abarrotesnorte.pe', direccion: 'Av. Industrial 890' },
-          { id: 2, tipoDocumento: 'RUC', documento: '20100012345', nombreRazonSocial: 'Cervecería & Licores Perú S.A.A.', telefono: '013110000', email: 'pedidos@licoresperu.pe', direccion: 'Panamericana Norte Km 15' }
-        ]);
-      }
+      setItems([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // ============================================
+  // 🔍 BÚSQUEDA AUTOMÁTICA DE DOCUMENTO
+  // ============================================
+  const handleDocumentoChange = async (e) => {
+    const valor = e.target.value.replace(/\D/g, '');
+    setFormData(prev => ({ ...prev, documento: valor }));
+
+    console.log(`🔤 [${activeTab}] Documento: ${valor} | Longitud: ${valor.length}`);
+
+    // 🟢 PROVEEDOR CON RUC → Consultar SUNAT
+    if (activeTab === 'proveedores' && formData.tipoDocumento === 'RUC' && valor.length === 11) {
+      console.log('🚀 Consultando SUNAT para RUC:', valor);
+      setBuscandoDoc(true);
+      try {
+        const data = await buscarRucProveedor(valor);
+        console.log('📦 Respuesta SUNAT:', data);
+
+        if (data && data.razonSocial) {
+          setFormData(prev => ({
+            ...prev,
+            nombreRazonSocial: data.razonSocial || prev.nombreRazonSocial,
+            direccion: data.direccion || prev.direccion
+          }));
+          console.log('✅ Autocompletado exitoso');
+        }
+      } catch (error) {
+        console.error('❌ Error al consultar RUC:', error);
+      } finally {
+        setBuscandoDoc(false);
+      }
+    }
+
+    // 🟢 CLIENTE CON DNI o RUC → Consultar RENIEC/SUNAT
+    if (activeTab === 'clientes' && (valor.length === 8 || valor.length === 11)) {
+      console.log('🚀 Consultando cliente con documento:', valor);
+      setBuscandoDoc(true);
+      try {
+        const data = await buscarClientePorDocumento(valor);
+        console.log('📦 Respuesta cliente:', data);
+
+        if (data) {
+          setFormData(prev => ({
+            ...prev,
+            nombreRazonSocial: data.nombreRazonSocial || prev.nombreRazonSocial,
+            direccion: data.direccion || prev.direccion,
+            email: data.correo || prev.email
+          }));
+          console.log('✅ Autocompletado exitoso');
+        }
+      } catch (error) {
+        console.error('❌ Error al consultar cliente:', error);
+      } finally {
+        setBuscandoDoc(false);
+      }
+    }
+  };
+
   const itemsFiltrados = items.filter(item => 
-    item.nombreRazonSocial.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.documento.includes(searchTerm)
+    (item.nombreRazonSocial || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.documento || '').includes(searchTerm)
   );
 
   const handleOpenNew = () => {
@@ -89,8 +164,8 @@ export default function Clientes() {
     setEditingId(item.id);
     setFormData({
       tipoDocumento: item.tipoDocumento || 'DNI',
-      documento: item.documento,
-      nombreRazonSocial: item.nombreRazonSocial,
+      documento: item.documento || '',
+      nombreRazonSocial: item.nombreRazonSocial || '',
       telefono: item.telefono || '',
       email: item.email || '',
       direccion: item.direccion || ''
@@ -102,31 +177,54 @@ export default function Clientes() {
     e.preventDefault();
     try {
       if (activeTab === 'clientes') {
+        const dataCliente = {
+          tipoDocumento: formData.tipoDocumento,
+          numeroDocumento: formData.documento,
+          nombreRazonSocial: formData.nombreRazonSocial,
+          telefono: formData.telefono,
+          correo: formData.email,
+          direccion: formData.direccion
+        };
         if (editingId) {
-          await updateCliente(editingId, formData);
+          await updateCliente(editingId, dataCliente);
         } else {
-          await createCliente(formData);
+          await createCliente(dataCliente);
         }
       } else {
-        await createProveedor(formData);
+        // 👇 MAPEO CORRECTO PARA PROVEEDOR
+        const dataProveedor = {
+          ruc: formData.documento,
+          razonSocial: formData.nombreRazonSocial,
+          telefono: formData.telefono,
+          email: formData.email,
+          direccion: formData.direccion
+        };
+        if (editingId) {
+          await updateProveedor(editingId, dataProveedor);
+        } else {
+          await createProveedor(dataProveedor);
+        }
       }
       cargarDatos();
       setIsModalOpen(false);
     } catch (error) {
       console.error(`Error al guardar en ${activeTab}:`, error);
-      alert("Hubo un error al guardar los datos.");
+      alert("Error al guardar: " + (error.response?.data || error.message));
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm(`¿Está seguro de eliminar este registro de ${activeTab}?`)) {
+    if (window.confirm(`¿Está seguro de eliminar este registro?`)) {
       try {
         if (activeTab === 'clientes') {
           await deleteCliente(id);
+        } else {
+          await deleteProveedor(id);
         }
         cargarDatos();
       } catch (error) {
         console.error("Error al eliminar:", error);
+        alert("Error al eliminar: " + (error.response?.data || error.message));
       }
     }
   };
@@ -142,7 +240,7 @@ export default function Clientes() {
               <Users className="text-emerald-600" /> Directorio de Contactos
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Comercial El Norteño — Gestión de Clientes para comprobantes y Proveedores
+              Comercial El Norteño — Gestión de Clientes y Proveedores
             </p>
           </div>
 
@@ -191,7 +289,7 @@ export default function Clientes() {
           </button>
         </div>
 
-        {/* Tabla de Registros */}
+        {/* Tabla */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -207,7 +305,13 @@ export default function Clientes() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
-                {itemsFiltrados.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-8 text-gray-400">
+                      Cargando...
+                    </td>
+                  </tr>
+                ) : itemsFiltrados.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="text-center py-8 text-gray-400">
                       No se encontraron {activeTab} registrados.
@@ -270,10 +374,10 @@ export default function Clientes() {
 
       </div>
 
-      {/* Modal para Crear / Editar */}
+      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-150">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
             <div className="bg-emerald-800 px-6 py-4 flex justify-between items-center text-white">
               <h3 className="font-bold text-lg">
                 {editingId ? 'Editar' : 'Nuevo'} {activeTab === 'clientes' ? 'Cliente' : 'Proveedor'}
@@ -293,7 +397,8 @@ export default function Clientes() {
                   <select
                     value={formData.tipoDocumento}
                     onChange={(e) => setFormData({ ...formData, tipoDocumento: e.target.value })}
-                    className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm bg-white"
+                    disabled={editingId ? true : false}
+                    className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm bg-white disabled:bg-gray-100 disabled:text-gray-500"
                   >
                     <option value="DNI">DNI</option>
                     <option value="RUC">RUC</option>
@@ -303,15 +408,30 @@ export default function Clientes() {
 
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1">N° Documento *</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={formData.tipoDocumento === 'RUC' ? 11 : 8}
-                    value={formData.documento}
-                    onChange={(e) => setFormData({ ...formData, documento: e.target.value })}
-                    placeholder={formData.tipoDocumento === 'RUC' ? '11 dígitos' : '8 dígitos'}
-                    className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm font-mono"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      maxLength={formData.tipoDocumento === 'RUC' ? 11 : 8}
+                      value={formData.documento}
+                      onChange={handleDocumentoChange}
+                      disabled={editingId ? true : false}
+                      placeholder={formData.tipoDocumento === 'RUC' ? '11 dígitos' : '8 dígitos'}
+                      className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm font-mono pr-10 disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                    {buscandoDoc && !editingId && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 text-sm animate-pulse">
+                        ⏳
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {editingId
+                      ? 'El número de documento no se puede modificar al editar'
+                      : formData.tipoDocumento === 'RUC' && activeTab === 'proveedores'
+                        ? 'Al escribir 11 dígitos se consultará SUNAT'
+                        : 'Ingresa el número de documento'}
+                  </p>
                 </div>
               </div>
 

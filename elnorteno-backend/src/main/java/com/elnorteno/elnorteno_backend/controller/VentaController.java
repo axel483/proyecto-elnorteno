@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/ventas")
@@ -18,9 +19,16 @@ public class VentaController {
     @Autowired
     private VentaService ventaService;
 
+    // 👇 MODIFICADO: Recibe idEmpresa para filtrar
     @GetMapping
-    public List<Venta> listar() {
-        return ventaService.listarTodas();
+    public List<Venta> listar(@RequestParam(required = false) Integer idEmpresa) {
+        List<Venta> ventas = ventaService.listarTodas();
+        
+        if (idEmpresa == null) return ventas;
+
+        return ventas.stream()
+                .filter(v -> v.getIdEmpresa() == null || v.getIdEmpresa().equals(idEmpresa))
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/{idVenta}/detalles")

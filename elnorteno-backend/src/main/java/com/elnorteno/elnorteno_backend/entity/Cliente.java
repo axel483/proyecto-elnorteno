@@ -29,6 +29,13 @@ public class Cliente {
     @Column(name = "telefono", length = 20)
     private String telefono;
 
+    @Column(name = "correo", length = 100)
+    private String correo;
+    
     @Column(name = "direccion", length = 200)
     private String direccion;
+
+    // 👇 CAMPO SAAS
+    @Column(name = "id_empresa")
+    private Integer idEmpresa;
 }

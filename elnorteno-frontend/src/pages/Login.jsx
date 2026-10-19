@@ -19,17 +19,23 @@ export default function Login({ onLogin }) {
         password: password
       });
 
-      // Mapeamos los datos devueltos por Spring Boot para que coincidan con lo que espera App.jsx
+      // 👇 MAPEO CORREGIDO PARA DETECTAR SUPERADMIN
+      const rolString = 
+        typeof response.data.rol === 'string' 
+          ? response.data.rol 
+          : (response.data.rol?.nombre || 'ADMINISTRADOR');
+
       const usuarioFormateado = {
         username: response.data.nombreUsuario || response.data.username || username,
-        rol: response.data.rol?.nombre || 'ADMINISTRADOR',
+        rol: rolString,                                              // "SUPERADMIN", "ADMIN", "CAJERO"
+        rolUsuario: rolString,                                       // 👈 Alias para verificación
         datos: response.data
       };
 
       // Guardamos la sesión localmente
       localStorage.setItem('usuario', JSON.stringify(usuarioFormateado));
 
-      // Notificamos a App.jsx para que le quite la pantalla de Login y muestre el POS
+      // Notificamos a App.jsx
       if (onLogin) {
         onLogin(usuarioFormateado);
       }

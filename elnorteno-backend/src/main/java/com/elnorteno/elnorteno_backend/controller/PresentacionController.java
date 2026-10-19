@@ -14,7 +14,6 @@ public class PresentacionController {
     @Autowired
     private ProductoService productoService;
 
-    // ✅ ACTUALIZAR stock de una presentación
     @PutMapping("/{id}")
     public ResponseEntity<?> actualizarStock(@PathVariable Integer id, @RequestBody PresentacionProducto presentacion) {
         try {

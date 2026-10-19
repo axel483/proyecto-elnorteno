@@ -9,14 +9,12 @@ public class VentaDTO {
     private Integer idSesion;
     private Integer idCliente;
     private Integer idUsuario;
-    private String metodoPago; // 'EFECTIVO', 'YAPE', 'MIXTO'
+    private String metodoPago;
+    private String tipoComprobante; 
     private BigDecimal montoTotal;
     
-    // Datos para el Comprobante
-    private String tipoComprobante; // 'COTIZACION', 'NOTA_VENTA', 'BOLETA'
-    private String serie;
-    private String numero;
-    private String formatoImpresion; // 'TICKET_80MM', 'A4'
-
+    // 👇CAMPO SAAS
+    private Integer idEmpresa;
+    
     private List<DetalleVentaDTO> detalles;
 }

@@ -5,6 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "productos")
 @Data
@@ -32,4 +35,14 @@ public class Producto {
 
     @Column(name = "estado")
     private Boolean estado = true;
+
+    @Column(name = "stock", nullable = false)
+    private Integer stock = 0;
+
+    // 👇 NUEVO CAMPO PARA EL SAAS MULTI-TENANT
+    @Column(name = "id_empresa")
+    private Integer idEmpresa;
+
+    @OneToMany(mappedBy = "producto", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PresentacionProducto> presentaciones = new ArrayList<>();
 }

@@ -18,9 +18,10 @@ public class Usuario {
     @Column(name = "id_usuario")
     private Integer idUsuario;
 
+    // Relación con la tabla roles (id_rol)
     @ManyToOne
     @JoinColumn(name = "id_rol", nullable = false)
-    private Rol rol;
+    private Rol rolObj;
 
     @Column(name = "nombre_usuario", nullable = false, unique = true, length = 50)
     private String nombreUsuario;
@@ -33,6 +34,20 @@ public class Usuario {
 
     @Column(name = "apellidos", nullable = false, length = 100)
     private String apellidos;
+
+    // 👇 CAMPOS NUEVOS PARA EL SAAS
+    @Column(name = "nombre_completo")
+    private String nombreCompleto;
+
+    @Column(name = "rol", length = 20)
+    private String rol;
+
+    @Column(name = "username", length = 50)
+    private String username;
+
+    @Column(name = "id_empresa")
+    private Integer idEmpresa;
+    // ------------------------------------------------
 
     @Column(name = "estado")
     private Boolean estado = true;
